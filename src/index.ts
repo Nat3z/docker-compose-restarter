@@ -15,62 +15,62 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
     console.log(`Restarting Docker Compose services from: ${COMPOSE_FILE}`);
     logs.push("Starting restart process...");
 
-    // If critical services are defined, stop them first
+    // If critical services are defined, restart them first
     if (CRITICAL_SERVICES.length > 0) {
-      logs.push(`Stopping critical services first: ${CRITICAL_SERVICES.join(', ')}`);
-      console.log(`Stopping critical services: ${CRITICAL_SERVICES.join(', ')}`);
+      logs.push(`Restarting critical services first: ${CRITICAL_SERVICES.join(', ')}`);
+      console.log(`Restarting critical services: ${CRITICAL_SERVICES.join(', ')}`);
 
-      // Stop critical services (Docker will auto-restart them due to restart: always)
+      // Restart critical services first
       for (const service of CRITICAL_SERVICES) {
-        logs.push(`Stopping ${service}...`);
-        const stopProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "stop", service], {
+        logs.push(`Restarting ${service}...`);
+        const restartProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "restart", service], {
           stdout: "pipe",
           stderr: "pipe",
           cwd: COMPOSE_DIR,
           env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
         });
 
-        const stopError = await new Response(stopProc.stderr).text();
-        await stopProc.exited;
+        const restartError = await new Response(restartProc.stderr).text();
+        await restartProc.exited;
 
-        if (stopProc.exitCode !== 0) {
-          const errorMsg = `Failed to stop ${service}: ${stopError}`;
+        if (restartProc.exitCode !== 0) {
+          const errorMsg = `Failed to restart ${service}: ${restartError}`;
           console.error(errorMsg);
           logs.push(errorMsg);
           return { success: false, error: errorMsg, logs };
         }
-        logs.push(`${service} stopped (will auto-restart)`);
-        console.log(`${service} stopped successfully`);
+        logs.push(`${service} restarted successfully`);
+        console.log(`${service} restarted successfully`);
       }
 
-      logs.push("All critical services stopped, waiting for graceful shutdown...");
-      // Wait a bit for critical services to fully stop and restart
+      logs.push("All critical services restarted, waiting for stabilization...");
+      // Wait a bit for critical services to stabilize
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    // Now stop all remaining services (Docker will auto-restart them due to restart: always)
-    logs.push("Stopping all services...");
-    console.log("Stopping all services...");
+    // Now restart all remaining services
+    logs.push("Restarting all services...");
+    console.log("Restarting all services...");
 
-    const stopAllProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "stop"], {
+    const restartAllProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "restart"], {
       stdout: "pipe",
       stderr: "pipe",
       cwd: COMPOSE_DIR,
       env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
     });
 
-    const stopAllError = await new Response(stopAllProc.stderr).text();
-    await stopAllProc.exited;
+    const restartAllError = await new Response(restartAllProc.stderr).text();
+    await restartAllProc.exited;
 
-    if (stopAllProc.exitCode !== 0) {
-      const errorMsg = `Failed to stop all services: ${stopAllError}`;
+    if (restartAllProc.exitCode !== 0) {
+      const errorMsg = `Failed to restart all services: ${restartAllError}`;
       console.error(errorMsg);
       logs.push(errorMsg);
       return { success: false, error: errorMsg, logs };
     }
 
-    logs.push("All services stopped successfully! Docker will auto-restart them.");
-    console.log("Docker compose services stopped - Docker daemon will auto-restart them");
+    logs.push("All services restarted successfully!");
+    console.log("Docker compose services restarted successfully");
     return { success: true, logs };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
