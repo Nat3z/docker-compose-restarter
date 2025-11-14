@@ -9,8 +9,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
     console.log(`Restarting Docker Compose services from: ${COMPOSE_FILE}`);
 
     // Run docker compose restart command
-    const proc = spawn({
-      cmd: ["docker", "compose", "-f", COMPOSE_FILE, "restart"],
+    const proc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "restart"], {
       stdout: "pipe",
       stderr: "pipe",
       env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
@@ -40,8 +39,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
 async function checkDockerComposeStatus(): Promise<{ status: string }> {
   try {
     // Check if docker compose services are running
-    const proc = spawn({
-      cmd: ["docker", "compose", "-f", COMPOSE_FILE, "ps", "-q"],
+    const proc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "ps", "-q"], {
       stdout: "pipe",
       stderr: "pipe",
       env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
