@@ -1,0 +1,13 @@
+{
+  "name": "jellyfin-restarter",
+  "version": "1.0.0",
+  "description": "Simple web interface to restart Docker Compose containers",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

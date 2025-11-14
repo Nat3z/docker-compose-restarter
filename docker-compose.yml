@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  restarter:
+    build: .
+    container_name: jellyfin-restarter
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount docker socket to allow docker commands
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the directory containing your docker-compose.yml
+      # This should be the directory you want to restart
+      - ./:/docker-compose:ro
+    environment:
+      - PORT=3000
+      # Path to the docker-compose file you want to restart
+      - COMPOSE_FILE=/docker-compose/docker-compose.yml
+    restart: unless-stopped

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker Compose Restarter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            background: white;
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            min-width: 400px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+        .status.checking {
+            background: #ffd700;
+            color: #333;
+        }
+
+        .status.online {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status.offline {
+            background: #f44336;
+            color: white;
+        }
+
+        .status.restarting {
+            background: #ff9800;
+            color: white;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 1rem 3rem;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .logs {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: #f5f5f5;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .log-entry {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: #999;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Docker Compose Restarter</h1>
+        <div id="status" class="status checking">Checking...</div>
+        <br>
+        <button id="restartBtn" onclick="restartContainers()">Restart All</button>
+        <div class="logs" id="logs"></div>
+    </div>
+
+    <script>
+        let statusCheckInterval = null;
+        let isRestarting = false;
+        let currentTimeout = 1000; // Start with 1 second
+        const MAX_TIMEOUT = 30000; // Max 30 seconds
+
+        function addLog(message) {
+            const logs = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">${time}</span> - ${message}`;
+            logs.insertBefore(entry, logs.firstChild);
+
+            // Keep only last 10 entries
+            while (logs.children.length > 10) {
+                logs.removeChild(logs.lastChild);
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                const statusEl = document.getElementById('status');
+
+                if (data.status === 'online') {
+                    statusEl.className = 'status online';
+                    statusEl.textContent = 'Online';
+
+                    if (isRestarting) {
+                        addLog('Containers are back online!');
+                        isRestarting = false;
+                        currentTimeout = 1000;
+                        document.getElementById('restartBtn').disabled = false;
+                    }
+                } else {
+                    statusEl.className = 'status offline';
+                    statusEl.textContent = 'Offline';
+                }
+            } catch (error) {
+                const statusEl = document.getElementById('status');
+                statusEl.className = 'status offline';
+                statusEl.textContent = 'Offline';
+
+                if (isRestarting) {
+                    addLog(`Waiting... (next check in ${Math.round(currentTimeout / 1000)}s)`);
+                }
+            }
+        }
+
+        function scheduleNextCheck() {
+            if (isRestarting) {
+                setTimeout(() => {
+                    checkStatus().then(() => {
+                        if (isRestarting) {
+                            // Exponential backoff
+                            currentTimeout = Math.min(currentTimeout * 1.5, MAX_TIMEOUT);
+                            scheduleNextCheck();
+                        }
+                    });
+                }, currentTimeout);
+            }
+        }
+
+        async function restartContainers() {
+            const btn = document.getElementById('restartBtn');
+            const statusEl = document.getElementById('status');
+
+            btn.disabled = true;
+            statusEl.className = 'status restarting';
+            statusEl.textContent = 'Restarting...';
+            isRestarting = true;
+            currentTimeout = 1000;
+
+            addLog('Sending restart command...');
+
+            try {
+                const response = await fetch('/api/restart', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addLog('Restart command sent successfully');
+                    addLog('Waiting for containers to come back online...');
+                    scheduleNextCheck();
+                } else {
+                    addLog(`Error: ${data.error || 'Failed to restart'}`);
+                    isRestarting = false;
+                    btn.disabled = false;
+                    statusEl.className = 'status offline';
+                    statusEl.textContent = 'Error';
+                }
+            } catch (error) {
+                addLog(`Error: ${error.message}`);
+                isRestarting = false;
+                btn.disabled = false;
+                statusEl.className = 'status offline';
+                statusEl.textContent = 'Error';
+            }
+        }
+
+        // Initial status check
+        checkStatus();
+
+        // Check status every 5 seconds when not restarting
+        setInterval(() => {
+            if (!isRestarting) {
+                checkStatus();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
