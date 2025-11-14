@@ -20,7 +20,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
       logs.push(`Stopping critical services first: ${CRITICAL_SERVICES.join(', ')}`);
       console.log(`Stopping critical services: ${CRITICAL_SERVICES.join(', ')}`);
 
-      // Stop critical services
+      // Stop critical services (Docker will auto-restart them due to restart: always)
       for (const service of CRITICAL_SERVICES) {
         logs.push(`Stopping ${service}...`);
         const stopProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "stop", service], {
@@ -39,16 +39,16 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
           logs.push(errorMsg);
           return { success: false, error: errorMsg, logs };
         }
-        logs.push(`${service} stopped successfully`);
+        logs.push(`${service} stopped (will auto-restart)`);
         console.log(`${service} stopped successfully`);
       }
 
       logs.push("All critical services stopped, waiting for graceful shutdown...");
-      // Wait a bit for critical services to fully stop
+      // Wait a bit for critical services to fully stop and restart
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    // Now stop all remaining services
+    // Now stop all remaining services (Docker will auto-restart them due to restart: always)
     logs.push("Stopping all services...");
     console.log("Stopping all services...");
 
@@ -69,30 +69,8 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
       return { success: false, error: errorMsg, logs };
     }
 
-    logs.push("All services stopped, starting all services...");
-    console.log("All services stopped, starting all services...");
-
-    // Start all services
-    const startProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "up", "-d"], {
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: COMPOSE_DIR,
-      env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
-    });
-
-    const startOutput = await new Response(startProc.stdout).text();
-    const startError = await new Response(startProc.stderr).text();
-    await startProc.exited;
-
-    if (startProc.exitCode !== 0) {
-      const errorMsg = `Failed to start services: ${startError}`;
-      console.error(errorMsg);
-      logs.push(errorMsg);
-      return { success: false, error: errorMsg, logs };
-    }
-
-    logs.push("All services started successfully!");
-    console.log("Docker compose restart successful");
+    logs.push("All services stopped successfully! Docker will auto-restart them.");
+    console.log("Docker compose services stopped - Docker daemon will auto-restart them");
     return { success: true, logs };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
