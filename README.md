@@ -37,6 +37,23 @@ The application can be configured via environment variables in `docker-compose.y
 
 - `PORT`: The port the web server runs on (default: 3000)
 - `COMPOSE_FILE`: Path to the docker-compose.yml file to restart (default: /docker-compose/docker-compose.yml)
+- `CRITICAL_SERVICES`: Comma-separated list of service names to stop first before stopping all other services (optional)
+
+#### Critical Services
+
+You can specify critical services that should be stopped first before shutting down everything else. This is useful for services that need graceful shutdown or have dependencies that should stop in a specific order.
+
+Example configuration:
+```yaml
+environment:
+  - CRITICAL_SERVICES=jellyfin,plex,database
+```
+
+When a restart is triggered:
+1. Critical services are stopped one by one in the order specified
+2. System waits 2 seconds for graceful shutdown
+3. All remaining services are stopped
+4. All services are started back up
 
 ### Volume Mounts
 

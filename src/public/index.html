@@ -213,8 +213,12 @@
 
                 const data = await response.json();
 
+                // Display logs from the restart process
+                if (data.logs && Array.isArray(data.logs)) {
+                    data.logs.forEach(log => addLog(log));
+                }
+
                 if (response.ok) {
-                    addLog('Restart command sent successfully');
                     addLog('Waiting for containers to come back online...');
                     scheduleNextCheck();
                 } else {
