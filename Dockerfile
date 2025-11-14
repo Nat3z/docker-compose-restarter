@@ -3,12 +3,10 @@ WORKDIR /app
 
 # Install curl and Docker CLI
 RUN apt-get update && \
-    apt-get install -y curl && \
-    curl -fsSLO https://get.docker.com/builds/Linux/x86_64/docker-17.03.1-ce.tgz && \
-    tar --strip-components=1 -xvzf docker-17.03.1-ce.tgz -C /usr/local/bin && \
-    rm docker-17.03.1-ce.tgz && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get -qy full-upgrade && \
+    apt-get install -qy curl && \
+    apt-get install -qy curl && \
+    curl -sSL https://get.docker.com/ | sh
 
 # Install dependencies
 COPY package.json ./
