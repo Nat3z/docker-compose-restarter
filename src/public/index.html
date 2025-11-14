@@ -12,107 +12,102 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: 'Courier New', Courier, monospace;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #000;
+            color: #fff;
         }
 
         .container {
-            background: white;
-            padding: 3rem;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            background: #000;
+            padding: 2rem;
+            border: 2px solid #fff;
             text-align: center;
             min-width: 400px;
+            max-width: 600px;
         }
 
         h1 {
-            color: #333;
+            color: #fff;
             margin-bottom: 2rem;
-            font-size: 2rem;
+            font-size: 1.5rem;
+            font-weight: normal;
+            letter-spacing: 2px;
         }
 
         .status {
             display: inline-block;
-            padding: 0.75rem 1.5rem;
-            border-radius: 50px;
-            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border: 1px solid #fff;
             margin-bottom: 2rem;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
+            font-size: 1rem;
+            font-weight: normal;
         }
 
         .status.checking {
-            background: #ffd700;
-            color: #333;
+            background: #000;
+            color: #fff;
         }
 
         .status.online {
-            background: #4caf50;
-            color: white;
+            background: #fff;
+            color: #000;
         }
 
         .status.offline {
-            background: #f44336;
-            color: white;
+            background: #000;
+            color: #fff;
         }
 
         .status.restarting {
-            background: #ff9800;
-            color: white;
-            animation: pulse 1.5s ease-in-out infinite;
+            background: #000;
+            color: #fff;
+            animation: blink 1s step-start infinite;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+        @keyframes blink {
+            50% { opacity: 0.3; }
         }
 
         button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 1rem 3rem;
-            font-size: 1.2rem;
-            border-radius: 50px;
+            background: #000;
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
             cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            font-family: 'Courier New', Courier, monospace;
+            transition: all 0.2s ease;
         }
 
         button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        button:active:not(:disabled) {
-            transform: translateY(0);
+            background: #fff;
+            color: #000;
         }
 
         button:disabled {
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
         .logs {
             margin-top: 2rem;
             padding: 1rem;
-            background: #f5f5f5;
-            border-radius: 10px;
+            background: #000;
+            border: 1px solid #fff;
             max-height: 200px;
             overflow-y: auto;
             text-align: left;
-            font-size: 0.9rem;
-            color: #666;
+            font-size: 0.85rem;
+            color: #fff;
         }
 
         .log-entry {
             padding: 0.25rem 0;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #333;
         }
 
         .log-entry:last-child {
@@ -120,15 +115,15 @@
         }
 
         .log-time {
-            color: #999;
-            font-size: 0.8rem;
+            color: #888;
+            font-size: 0.85rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Docker Compose Restarter</h1>
-        <div id="status" class="status checking">Checking...</div>
+        <div id="status" class="status offline">Offline</div>
         <br>
         <button id="restartBtn" onclick="restartContainers()">Restart All</button>
         <div class="logs" id="logs"></div>

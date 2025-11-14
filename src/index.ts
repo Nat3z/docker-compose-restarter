@@ -13,6 +13,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
       cmd: ["docker", "compose", "-f", COMPOSE_FILE, "restart"],
       stdout: "pipe",
       stderr: "pipe",
+      env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
     });
 
     const output = await new Response(proc.stdout).text();
@@ -43,6 +44,7 @@ async function checkDockerComposeStatus(): Promise<{ status: string }> {
       cmd: ["docker", "compose", "-f", COMPOSE_FILE, "ps", "-q"],
       stdout: "pipe",
       stderr: "pipe",
+      env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
     });
 
     const output = await new Response(proc.stdout).text();
