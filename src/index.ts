@@ -3,6 +3,7 @@ import { spawn } from "bun";
 
 const PORT = process.env.PORT || 3000;
 const COMPOSE_FILE = process.env.COMPOSE_FILE || "/docker-compose/docker-compose.yml";
+const COMPOSE_DIR = COMPOSE_FILE.substring(0, COMPOSE_FILE.lastIndexOf('/'));
 const CRITICAL_SERVICES = process.env.CRITICAL_SERVICES
   ? process.env.CRITICAL_SERVICES.split(',').map(s => s.trim()).filter(s => s.length > 0)
   : [];
@@ -25,6 +26,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
         const stopProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "stop", service], {
           stdout: "pipe",
           stderr: "pipe",
+          cwd: COMPOSE_DIR,
           env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
         });
 
@@ -53,6 +55,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
     const stopAllProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "stop"], {
       stdout: "pipe",
       stderr: "pipe",
+      cwd: COMPOSE_DIR,
       env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
     });
 
@@ -73,6 +76,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
     const startProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "up", "-d"], {
       stdout: "pipe",
       stderr: "pipe",
+      cwd: COMPOSE_DIR,
       env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
     });
 
@@ -108,6 +112,7 @@ async function checkDockerComposeStatus(): Promise<{ status: string }> {
     const proc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "ps", "-q"], {
       stdout: "pipe",
       stderr: "pipe",
+      cwd: COMPOSE_DIR,
       env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
     });
 
