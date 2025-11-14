@@ -109,6 +109,7 @@ async function checkDockerComposeStatus(): Promise<{ status: string }> {
 
 const server = Bun.serve({
   port: PORT,
+  idleTimeout: 120, // 120 seconds to allow for Docker operations
   async fetch(req) {
     const url = new URL(req.url);
 
