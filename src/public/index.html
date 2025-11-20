@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Docker Compose Restarter</title>
+    <title>Jellytils</title>
     <style>
         * {
             margin: 0;
@@ -122,11 +122,38 @@
 </head>
 <body>
     <div class="container">
-        <h1>Docker Compose Restarter</h1>
+        <h1>Jellytils</h1>
         <div id="status" class="status offline">Offline</div>
         <br>
         <button id="restartBtn" onclick="restartContainers()">Restart All</button>
         <div class="logs" id="logs"></div>
+
+        <hr style="border: 1px solid #fff; margin: 2rem 0;">
+
+        <h1>Add to Debridav</h1>
+        <div style="text-align: left; margin-bottom: 2rem;">
+             <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem;">Magnet Link:</label>
+                <input type="text" id="magnetLink" style="width: 100%; padding: 0.5rem; background: #000; color: #fff; border: 1px solid #fff; font-family: inherit;">
+             </div>
+             
+             <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem;">Type:</label>
+                <select id="torrentType" style="width: 100%; padding: 0.5rem; background: #000; color: #fff; border: 1px solid #fff; font-family: inherit;">
+                    <option value="movies">Movies</option>
+                    <option value="tv">TV</option>
+                </select>
+             </div>
+
+             <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-size: 0.85rem;">Name:</label>
+                <input type="text" id="torrentName" placeholder="e.g. Movie Title (Year)" style="width: 100%; padding: 0.5rem; background: #000; color: #fff; border: 1px solid #fff; font-family: inherit;">
+             </div>
+
+             <button id="addTorrentBtn" onclick="addTorrent()" style="width: 100%;">Add Torrent</button>
+        </div>
+        
+        <div id="torrentStatus" class="status offline">Idle</div>
     </div>
 
     <script>
@@ -246,6 +273,98 @@
                 checkStatus();
             }
         }, 5000);
+
+        async function addTorrent() {
+            const magnet = document.getElementById('magnetLink').value.trim();
+            const type = document.getElementById('torrentType').value;
+            const name = document.getElementById('torrentName').value.trim();
+            const btn = document.getElementById('addTorrentBtn');
+            const statusEl = document.getElementById('torrentStatus');
+
+            if (!magnet || !name) {
+                alert('Please provide both Magnet Link and Name');
+                return;
+            }
+
+            btn.disabled = true;
+            statusEl.textContent = 'Adding...';
+            statusEl.className = 'status restarting';
+
+            try {
+                const response = await fetch('/api/torrent/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ magnet, type, name })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    addLog(`Torrent added: ${name}`);
+                    statusEl.textContent = 'Added, checking status...';
+                    statusEl.className = 'status online';
+                    
+                    // Start polling
+                    if (data.hash) {
+                        pollTorrentStatus(data.hash, name);
+                    } else {
+                         statusEl.textContent = 'Added (No hash returned)';
+                         btn.disabled = false;
+                    }
+                    
+                    // Clear inputs
+                    document.getElementById('magnetLink').value = '';
+                    document.getElementById('torrentName').value = '';
+                } else {
+                    throw new Error(data.error || 'Failed to add');
+                }
+            } catch (error) {
+                addLog(`Error adding torrent: ${error.message}`);
+                statusEl.textContent = 'Error';
+                statusEl.className = 'status offline';
+                btn.disabled = false;
+            }
+        }
+
+        async function pollTorrentStatus(hash, name) {
+            const statusEl = document.getElementById('torrentStatus');
+            const btn = document.getElementById('addTorrentBtn');
+            
+            const check = async () => {
+                try {
+                    const response = await fetch(`/api/torrent/check?hash=${hash}`);
+                    const data = await response.json();
+                    
+                    if (data.found) {
+                        const progress = Math.round(data.progress || 0);
+                        const state = data.state;
+                        const isDownloaded = data.isDownloaded; // From backend
+                        
+                        if (isDownloaded) {
+                            statusEl.textContent = `Downloaded (${state})`;
+                            statusEl.className = 'status online';
+                            addLog(`Torrent ${name} finished downloading.`);
+                            btn.disabled = false; // Allow adding another
+                            return; // Stop polling
+                        } else {
+                            statusEl.textContent = `Downloading: ${progress}% (${state})`;
+                            statusEl.className = 'status restarting'; // Use restarting style for active
+                            setTimeout(check, 2000); // Check every 2s
+                        }
+                    } else {
+                         statusEl.textContent = 'Torrent not found in list yet...';
+                         setTimeout(check, 2000);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    statusEl.textContent = 'Error polling status';
+                    btn.disabled = false;
+                }
+            };
+            
+            // Start checking
+            setTimeout(check, 1000);
+        }
     </script>
 </body>
 </html>

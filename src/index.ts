@@ -1,5 +1,6 @@
 import { file } from "bun";
 import { spawn } from "bun";
+import { addTorrent, getTorrentStatus, getHashFromMagnet } from "./qbittorrent";
 
 const PORT = process.env.PORT || 3000;
 const COMPOSE_FILE = process.env.COMPOSE_FILE || "/docker-compose/docker-compose.yml";
@@ -139,6 +140,40 @@ const server = Bun.serve({
           { status: 500 }
         );
       }
+    }
+
+    if (url.pathname === "/api/torrent/add" && req.method === "POST") {
+      try {
+        const body = await req.json();
+        const { magnet, type, name } = body;
+        
+        if (!magnet || !type || !name) {
+            return Response.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        await addTorrent(magnet, type, name);
+        const hash = getHashFromMagnet(magnet);
+        
+        return Response.json({ success: true, hash });
+      } catch (e: any) {
+        console.error("Error adding torrent:", e);
+        return Response.json({ error: e.message }, { status: 500 });
+      }
+    }
+
+    if (url.pathname === "/api/torrent/check" && req.method === "GET") {
+       const hash = url.searchParams.get("hash");
+       if (!hash) {
+           return Response.json({ error: "Missing hash" }, { status: 400 });
+       }
+       
+       try {
+           const status = await getTorrentStatus(hash);
+           return Response.json(status || { found: false });
+       } catch (e: any) {
+           console.error("Error checking torrent:", e);
+           return Response.json({ error: e.message }, { status: 500 });
+       }
     }
 
     // 404

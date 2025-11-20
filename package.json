@@ -1,5 +1,5 @@
 {
-  "name": "jellyfin-restarter",
+  "name": "jellytils",
   "version": "1.0.0",
   "description": "Simple web interface to restart Docker Compose containers",
   "scripts": {
