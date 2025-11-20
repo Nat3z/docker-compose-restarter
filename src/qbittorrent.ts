@@ -63,17 +63,20 @@ export function getHashFromMagnet(magnet: string): string | null {
     return match ? match[1] : null;
 }
 
-export async function addTorrent(magnet: string, subfolder: string, name: string) {
+export async function addTorrent(magnet: string, type: string, name: string) {
     await ensureAuth();
     const formData = new FormData();
     formData.append("urls", magnet);
-    formData.append("savepath", `/data/${subfolder}`);
+    
+    formData.append("savepath", `/data/${type}`);
+    const category = type === "tv" ? "sonarr" : "radarr";
+    formData.append("category", category);
+
     if (name) {
         formData.append("rename", name);
     }
-    // formData.append("root_folder", "true"); 
-
-    console.log(`Adding torrent: ${name} to /data/${subfolder}`);
+    
+    console.log(`Adding torrent: ${name} [${category}] to /data/${type}`);
 
     const headers: Record<string, string> = {};
     if (authCookie) headers["Cookie"] = authCookie;
@@ -105,12 +108,18 @@ export async function addTorrent(magnet: string, subfolder: string, name: string
     return true;
 }
 
-export async function getTorrentStatus(hash: string) {
+export async function getTorrentStatus(hash: string, type?: string) {
     await ensureAuth();
     const headers: Record<string, string> = {};
     if (authCookie) headers["Cookie"] = authCookie;
 
-    let response = await fetch(`${QBIT_URL}/api/v2/torrents/info?hashes=${hash}`, {
+    let url = `${QBIT_URL}/api/v2/torrents/info?hashes=${hash}`;
+    if (type) {
+        const category = type === "tv" ? "sonarr" : "radarr";
+        url += `&category=${category}`;
+    }
+
+    let response = await fetch(url, {
         headers
     });
 
@@ -119,7 +128,7 @@ export async function getTorrentStatus(hash: string) {
          const retryHeaders: Record<string, string> = {};
          if (authCookie) retryHeaders["Cookie"] = authCookie;
 
-         response = await fetch(`${QBIT_URL}/api/v2/torrents/info?hashes=${hash}`, {
+         response = await fetch(url, {
             headers: retryHeaders
         });
     }
@@ -127,19 +136,23 @@ export async function getTorrentStatus(hash: string) {
     if (!response.ok) throw new Error("Failed to get status");
     
     const data: any = await response.json();
-    if (Array.isArray(data) && data.length > 0) {
-        const torrent = data[0];
-        // Calculate percentage if not explicitly provided or check "progress" (0-1)
-        const progress = torrent.progress * 100;
-        const isDownloaded = progress === 100 || torrent.state === "uploading" || torrent.state === "pausedUP" || torrent.state === "queuedUP" || torrent.state === "completed";
+    if (Array.isArray(data)) {
+        // Find the torrent with the matching hash (case-insensitive)
+        const torrent = data.find((t: any) => t.hash && t.hash.toLowerCase() === hash.toLowerCase());
         
-        return {
-            found: true,
-            name: torrent.name,
-            state: torrent.state,
-            progress: progress,
-            isDownloaded
-        };
+        if (torrent) {
+            // Calculate percentage if not explicitly provided or check "progress" (0-1)
+            const progress = torrent.progress * 100;
+            const isDownloaded = progress === 100 || torrent.state === "uploading" || torrent.state === "pausedUP" || torrent.state === "queuedUP" || torrent.state === "completed";
+            
+            return {
+                found: true,
+                name: torrent.name,
+                state: torrent.state,
+                progress: progress,
+                isDownloaded
+            };
+        }
     }
     return { found: false };
 }

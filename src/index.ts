@@ -163,12 +163,13 @@ const server = Bun.serve({
 
     if (url.pathname === "/api/torrent/check" && req.method === "GET") {
        const hash = url.searchParams.get("hash");
+       const type = url.searchParams.get("type");
        if (!hash) {
            return Response.json({ error: "Missing hash" }, { status: 400 });
        }
        
        try {
-           const status = await getTorrentStatus(hash);
+           const status = await getTorrentStatus(hash, type || undefined);
            return Response.json(status || { found: false });
        } catch (e: any) {
            console.error("Error checking torrent:", e);

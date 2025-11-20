@@ -306,7 +306,7 @@
                     
                     // Start polling
                     if (data.hash) {
-                        pollTorrentStatus(data.hash, name);
+                        pollTorrentStatus(data.hash, name, type);
                     } else {
                          statusEl.textContent = 'Added (No hash returned)';
                          btn.disabled = false;
@@ -326,13 +326,13 @@
             }
         }
 
-        async function pollTorrentStatus(hash, name) {
+        async function pollTorrentStatus(hash, name, type) {
             const statusEl = document.getElementById('torrentStatus');
             const btn = document.getElementById('addTorrentBtn');
             
             const check = async () => {
                 try {
-                    const response = await fetch(`/api/torrent/check?hash=${hash}`);
+                    const response = await fetch(`/api/torrent/check?hash=${hash}&type=${type}`);
                     const data = await response.json();
                     
                     if (data.found) {
