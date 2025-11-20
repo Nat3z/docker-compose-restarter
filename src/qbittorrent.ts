@@ -1,11 +1,12 @@
 
 const QBIT_URL = process.env.QBIT_URL || "http://debridav:8080";
-const QBIT_USER = process.env.QBIT_USER || "admin";
-const QBIT_PASS = process.env.QBIT_PASS || "adminadmin";
+const QBIT_USER = process.env.QBIT_USER;
+const QBIT_PASS = process.env.QBIT_PASS;
 
 let authCookie: string | null = null;
 
 async function login() {
+  if (!QBIT_USER || !QBIT_PASS) return;
   console.log(`Logging into qBittorrent at ${QBIT_URL}...`);
   const params = new URLSearchParams();
   params.append("username", QBIT_USER);
@@ -51,6 +52,7 @@ async function login() {
 }
 
 async function ensureAuth() {
+    if (!QBIT_USER || !QBIT_PASS) return;
     if (!authCookie) {
         await login();
     }
@@ -73,22 +75,24 @@ export async function addTorrent(magnet: string, subfolder: string, name: string
 
     console.log(`Adding torrent: ${name} to /data/${subfolder}`);
 
+    const headers: Record<string, string> = {};
+    if (authCookie) headers["Cookie"] = authCookie;
+
     let response = await fetch(`${QBIT_URL}/api/v2/torrents/add`, {
         method: "POST",
-        headers: {
-            "Cookie": authCookie || ""
-        },
+        headers,
         body: formData
     });
 
-    if (response.status === 403) {
+    if (response.status === 403 && QBIT_USER && QBIT_PASS) {
         console.log("Auth expired, relogging...");
         await login();
+        const retryHeaders: Record<string, string> = {};
+        if (authCookie) retryHeaders["Cookie"] = authCookie;
+
         response = await fetch(`${QBIT_URL}/api/v2/torrents/add`, {
             method: "POST",
-            headers: {
-                "Cookie": authCookie || ""
-            },
+            headers: retryHeaders,
             body: formData
         });
     }
@@ -103,18 +107,20 @@ export async function addTorrent(magnet: string, subfolder: string, name: string
 
 export async function getTorrentStatus(hash: string) {
     await ensureAuth();
+    const headers: Record<string, string> = {};
+    if (authCookie) headers["Cookie"] = authCookie;
+
     let response = await fetch(`${QBIT_URL}/api/v2/torrents/info?hashes=${hash}`, {
-        headers: {
-            "Cookie": authCookie || ""
-        }
+        headers
     });
 
-    if (response.status === 403) {
+    if (response.status === 403 && QBIT_USER && QBIT_PASS) {
          await login();
+         const retryHeaders: Record<string, string> = {};
+         if (authCookie) retryHeaders["Cookie"] = authCookie;
+
          response = await fetch(`${QBIT_URL}/api/v2/torrents/info?hashes=${hash}`, {
-            headers: {
-                "Cookie": authCookie || ""
-            }
+            headers: retryHeaders
         });
     }
 
