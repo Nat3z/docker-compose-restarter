@@ -46,6 +46,7 @@ async function startLogMonitor() {
         const lines = text.split('\n');
         
         for (const line of lines) {
+          console.log(`[Monitor] Line: "${line.trim()}"`);
             if (line.includes(ERROR_TRIGGER)) {
                 const now = Date.now();
                 if (isRestarting || (now - lastRestartTime < RESTART_COOLDOWN)) {
