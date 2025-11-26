@@ -5,9 +5,83 @@ import { addTorrent, getTorrentStatus, getHashFromMagnet } from "./qbittorrent";
 const PORT = process.env.PORT || 3000;
 const COMPOSE_FILE = process.env.COMPOSE_FILE || "/docker-compose/docker-compose.yml";
 const COMPOSE_DIR = COMPOSE_FILE.substring(0, COMPOSE_FILE.lastIndexOf('/'));
+const LOG_LOOKER_SERVICE_NAME = process.env.LOG_LOOKER_SERVICE_NAME;
+const ERROR_TRIGGER = "[torbox-webdav]: Failed to stream with initial link";
 const CRITICAL_SERVICES = process.env.CRITICAL_SERVICES
   ? process.env.CRITICAL_SERVICES.split(',').map(s => s.trim()).filter(s => s.length > 0)
   : [];
+
+// Helper to determine docker command prefix
+function getDockerCmd(args: string[]): string[] {
+    return ["docker", ...args];
+}
+
+let isRestarting = false;
+
+async function startLogMonitor() {
+  if (!LOG_LOOKER_SERVICE_NAME) {
+    console.log("LOG_LOOKER_SERVICE_NAME not set. Log monitoring disabled.");
+    return;
+  }
+
+  console.log(`Starting log monitor for service: ${LOG_LOOKER_SERVICE_NAME}`);
+
+  let lastRestartTime = 0;
+  const RESTART_COOLDOWN = 60000; // 1 minute cooldown
+
+  while (true) {
+    try {
+      console.log(`Spawning docker logs for ${LOG_LOOKER_SERVICE_NAME}...`);
+      const proc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "logs", "-f", "--no-log-prefix", LOG_LOOKER_SERVICE_NAME]), {
+        stdout: "pipe",
+        stderr: "pipe", // Capture stderr too just in case, or ignore
+        cwd: COMPOSE_DIR,
+        env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
+      });
+
+      const decoder = new TextDecoder();
+      // Read from stdout
+      for await (const chunk of proc.stdout) {
+        const text = decoder.decode(chunk);
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+            if (line.includes(ERROR_TRIGGER)) {
+                const now = Date.now();
+                if (isRestarting || (now - lastRestartTime < RESTART_COOLDOWN)) {
+                    continue;
+                }
+                
+                console.log(`[Monitor] Trigger detected in ${LOG_LOOKER_SERVICE_NAME}: "${line.trim()}"`);
+                console.log("[Monitor] Initiating restart...");
+                
+                isRestarting = true;
+                // Don't await here to keep monitoring? 
+                // Actually if we restart, the log stream might die if the service is restarted.
+                // If we restart *all* services or the monitored service, this stream will end.
+                // We should handle that.
+                
+                restartDockerCompose().then(() => {
+                   lastRestartTime = Date.now();
+                   isRestarting = false;
+                }).catch(err => {
+                   console.error("[Monitor] Restart failed:", err);
+                   isRestarting = false;
+                });
+            }
+        }
+      }
+
+      await proc.exited;
+      console.log("Log monitor process exited. Restarting monitor in 5 seconds...");
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+    } catch (error) {
+      console.error(`Error in log monitor:`, error);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+}
 
 async function restartDockerCompose(): Promise<{ success: boolean; error?: string; logs?: string[] }> {
   const logs: string[] = [];
@@ -24,7 +98,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
       // Restart critical services first
       for (const service of CRITICAL_SERVICES) {
         logs.push(`Restarting ${service}...`);
-        const restartProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "restart", service], {
+        const restartProc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "restart", service]), {
           stdout: "pipe",
           stderr: "pipe",
           cwd: COMPOSE_DIR,
@@ -53,7 +127,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
     logs.push("Restarting all services...");
     console.log("Restarting all services...");
 
-    const restartAllProc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "restart"], {
+    const restartAllProc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "restart"]), {
       stdout: "pipe",
       stderr: "pipe",
       cwd: COMPOSE_DIR,
@@ -88,7 +162,7 @@ async function restartDockerCompose(): Promise<{ success: boolean; error?: strin
 async function checkDockerComposeStatus(): Promise<{ status: string }> {
   try {
     // Check if docker compose services are running
-    const proc = spawn(["docker", "compose", "-f", COMPOSE_FILE, "ps", "-q"], {
+    const proc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "ps", "-q"]), {
       stdout: "pipe",
       stderr: "pipe",
       cwd: COMPOSE_DIR,
@@ -187,3 +261,5 @@ console.log(`Monitoring docker-compose file: ${COMPOSE_FILE}`);
 if (CRITICAL_SERVICES.length > 0) {
   console.log(`Critical services (stop first): ${CRITICAL_SERVICES.join(', ')}`);
 }
+
+startLogMonitor();
