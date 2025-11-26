@@ -34,6 +34,7 @@ async function getJellyfinSessions(): Promise<string[]> {
 
     if (response.ok) {
       const sessions: any[] = await response.json();
+      console.log(`Found ${sessions.length} Jellyfin sessions`);
       return sessions.map(s => s.Id);
     }
   } catch (error) {
@@ -61,6 +62,7 @@ async function sendJellyfinMessage(sessionId: string, header: string, text: stri
       },
       body: JSON.stringify(messageData)
     });
+    console.log(`Message sent to session ${sessionId}: ${JSON.stringify(messageData)}`);
   } catch (error) {
     console.error(`Failed to send message to session ${sessionId}:`, error);
   }
@@ -314,6 +316,9 @@ const server = Bun.serve({
       const result = await restartDockerCompose([], reason);
 
       if (result.success) {
+        // now send a message to jellyfin that the restart is complete
+        await sendJellyfinBroadcast("Server restart complete. Try to stream again.");
+
         return Response.json({
           success: true,
           message: "Containers restarted",
