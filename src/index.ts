@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 const COMPOSE_FILE = process.env.COMPOSE_FILE || "/docker-compose/docker-compose.yml";
 const COMPOSE_DIR = COMPOSE_FILE.substring(0, COMPOSE_FILE.lastIndexOf('/'));
 const LOG_LOOKER_SERVICE_NAME = process.env.LOG_LOOKER_SERVICE_NAME;
-const ERROR_TRIGGER = "[torbox-webdav]: Failed to stream with initial link";
+const ERROR_TRIGGER = "[torbox-webdav] Failed to stream with initial link";
 const CRITICAL_SERVICES = process.env.CRITICAL_SERVICES
   ? process.env.CRITICAL_SERVICES.split(',').map(s => s.trim()).filter(s => s.length > 0)
   : [];
