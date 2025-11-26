@@ -14,9 +14,66 @@ const CRITICAL_SERVICES = process.env.CRITICAL_SERVICES
   ? process.env.CRITICAL_SERVICES.split(',').map(s => s.trim()).filter(s => s.length > 0)
   : [];
 
+const JELLYFIN_URL = process.env.JELLYFIN_URL;
+const JELLYFIN_API_KEY = process.env.JELLYFIN_API_KEY;
+const JELLYFIN_RESTART_MSG_HEADER = process.env.JELLYFIN_RESTART_MSG_HEADER || "Server Restart";
+
 // Helper to determine docker command prefix
 function getDockerCmd(args: string[]): string[] {
     return ["docker", ...args];
+}
+
+async function getJellyfinSessions(): Promise<string[]> {
+  if (!JELLYFIN_URL || !JELLYFIN_API_KEY) return [];
+
+  try {
+    const params = new URLSearchParams({ activeWithinSeconds: "60" });
+    const response = await fetch(`${JELLYFIN_URL}/Sessions?${params}`, {
+      headers: { "Authorization": `MediaBrowser Token=${JELLYFIN_API_KEY}` }
+    });
+
+    if (response.ok) {
+      const sessions: any[] = await response.json();
+      return sessions.map(s => s.Id);
+    }
+  } catch (error) {
+    console.error("Failed to get Jellyfin sessions:", error);
+  }
+  return [];
+}
+
+async function sendJellyfinMessage(sessionId: string, header: string, text: string, timeoutMs: number = 10000) {
+  if (!JELLYFIN_URL || !JELLYFIN_API_KEY) return;
+
+  try {
+    const url = `${JELLYFIN_URL}/Sessions/${sessionId}/Message`;
+    const messageData = {
+      Header: header,
+      Text: text,
+      TimeoutMs: timeoutMs
+    };
+
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `MediaBrowser Token=${JELLYFIN_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(messageData)
+    });
+  } catch (error) {
+    console.error(`Failed to send message to session ${sessionId}:`, error);
+  }
+}
+
+async function sendJellyfinBroadcast(text: string) {
+    if (!JELLYFIN_URL || !JELLYFIN_API_KEY) return;
+    
+    console.log(`Sending Jellyfin broadcast: ${text}`);
+    const sessions = await getJellyfinSessions();
+    if (sessions.length > 0) {
+        await Promise.all(sessions.map(id => sendJellyfinMessage(id, JELLYFIN_RESTART_MSG_HEADER, text)));
+    }
 }
 
 let isRestarting = false;
@@ -65,9 +122,11 @@ async function startLogMonitor() {
                 // If we restart *all* services or the monitored service, this stream will end.
                 // We should handle that.
                 
-                restartDockerCompose(LOG_RESTART_ONLY).then(() => {
+                restartDockerCompose(LOG_RESTART_ONLY, `Error received when streaming. Restarting services to fix. Please wait for a moment.`).then(() => {
                    lastRestartTime = Date.now();
                    isRestarting = false;
+                   // now send a message to jellyfin that the restart is complete
+                   sendJellyfinBroadcast("Server restart complete. Try to stream again.");
                 }).catch(err => {
                    console.error("[Monitor] Restart failed:", err);
                    isRestarting = false;
@@ -87,10 +146,18 @@ async function startLogMonitor() {
   }
 }
 
-async function restartDockerCompose(targetServices: string[] = []): Promise<{ success: boolean; error?: string; logs?: string[] }> {
+async function restartDockerCompose(targetServices: string[] = [], reason: string = "Maintenance"): Promise<{ success: boolean; error?: string; logs?: string[] }> {
   const logs: string[] = [];
 
   try {
+    if (JELLYFIN_URL && JELLYFIN_API_KEY) {
+        const msg = `Server restarting in 5s: ${reason}`;
+        logs.push(`Broadcasting to Jellyfin: ${msg}`);
+        await sendJellyfinBroadcast(msg);
+        console.log("Waiting 5 seconds before restart...");
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
     console.log(`Restarting Docker Compose services from: ${COMPOSE_FILE}`);
     logs.push("Starting restart process...");
 
@@ -234,7 +301,17 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/api/restart" && req.method === "POST") {
-      const result = await restartDockerCompose();
+      let reason = "Manual restart via API";
+      try {
+        if (req.headers.get("content-type")?.includes("application/json")) {
+            const body = await req.json();
+            if (body && body.reason) reason = body.reason;
+        }
+      } catch (e) {
+          console.error("Error parsing restart body", e);
+      }
+
+      const result = await restartDockerCompose([], reason);
 
       if (result.success) {
         return Response.json({
