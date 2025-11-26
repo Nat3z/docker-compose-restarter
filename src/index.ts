@@ -7,6 +7,9 @@ const COMPOSE_FILE = process.env.COMPOSE_FILE || "/docker-compose/docker-compose
 const COMPOSE_DIR = COMPOSE_FILE.substring(0, COMPOSE_FILE.lastIndexOf('/'));
 const LOG_LOOKER_SERVICE_NAME = process.env.LOG_LOOKER_SERVICE_NAME;
 const ERROR_TRIGGER = "[torbox-webdav] Failed to stream with initial link";
+const LOG_RESTART_ONLY = process.env.LOG_RESTART_ONLY
+  ? process.env.LOG_RESTART_ONLY.split(',').map(s => s.trim()).filter(s => s.length > 0)
+  : [];
 const CRITICAL_SERVICES = process.env.CRITICAL_SERVICES
   ? process.env.CRITICAL_SERVICES.split(',').map(s => s.trim()).filter(s => s.length > 0)
   : [];
@@ -32,7 +35,7 @@ async function startLogMonitor() {
   while (true) {
     try {
       console.log(`Spawning docker logs for ${LOG_LOOKER_SERVICE_NAME}...`);
-      const proc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "logs", "-f", "--no-log-prefix", LOG_LOOKER_SERVICE_NAME]), {
+      const proc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "logs", "-f", "--tail", "0", "--no-log-prefix", LOG_LOOKER_SERVICE_NAME]), {
         stdout: "pipe",
         stderr: "pipe", // Capture stderr too just in case, or ignore
         cwd: COMPOSE_DIR,
@@ -62,7 +65,7 @@ async function startLogMonitor() {
                 // If we restart *all* services or the monitored service, this stream will end.
                 // We should handle that.
                 
-                restartDockerCompose().then(() => {
+                restartDockerCompose(LOG_RESTART_ONLY).then(() => {
                    lastRestartTime = Date.now();
                    isRestarting = false;
                 }).catch(err => {
@@ -84,12 +87,42 @@ async function startLogMonitor() {
   }
 }
 
-async function restartDockerCompose(): Promise<{ success: boolean; error?: string; logs?: string[] }> {
+async function restartDockerCompose(targetServices: string[] = []): Promise<{ success: boolean; error?: string; logs?: string[] }> {
   const logs: string[] = [];
 
   try {
     console.log(`Restarting Docker Compose services from: ${COMPOSE_FILE}`);
     logs.push("Starting restart process...");
+
+    // If specific services are targeted (e.g. from LOG_RESTART_ONLY), restart only those
+    if (targetServices.length > 0) {
+      logs.push(`Restarting specific services: ${targetServices.join(', ')}`);
+      console.log(`Restarting specific services: ${targetServices.join(', ')}`);
+
+      for (const service of targetServices) {
+        logs.push(`Restarting ${service}...`);
+        const restartProc = spawn(getDockerCmd(["compose", "-f", COMPOSE_FILE, "restart", service]), {
+          stdout: "pipe",
+          stderr: "pipe",
+          cwd: COMPOSE_DIR,
+          env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" },
+        });
+
+        const restartError = await new Response(restartProc.stderr).text();
+        await restartProc.exited;
+
+        if (restartProc.exitCode !== 0) {
+          const errorMsg = `Failed to restart ${service}: ${restartError}`;
+          console.error(errorMsg);
+          logs.push(errorMsg);
+          return { success: false, error: errorMsg, logs };
+        }
+        logs.push(`${service} restarted successfully`);
+        console.log(`${service} restarted successfully`);
+      }
+      
+      return { success: true, logs };
+    }
 
     // If critical services are defined, restart them first
     if (CRITICAL_SERVICES.length > 0) {
@@ -261,6 +294,9 @@ console.log(`Server running at http://localhost:${server.port}`);
 console.log(`Monitoring docker-compose file: ${COMPOSE_FILE}`);
 if (CRITICAL_SERVICES.length > 0) {
   console.log(`Critical services (stop first): ${CRITICAL_SERVICES.join(', ')}`);
+}
+if (LOG_RESTART_ONLY.length > 0) {
+    console.log(`Log monitor will only restart: ${LOG_RESTART_ONLY.join(', ')}`);
 }
 
 startLogMonitor();
